@@ -6,6 +6,13 @@ import { merge } from '@ember/polyfills';
 import { isPresent } from '@ember/utils';
 import { next } from '@ember/runloop';
 import Configuration from '../configuration';
+import $ from 'jquery';
+import { defer } from 'rsvp';
+
+const gRecaptchaLoaded = defer();
+window.gRecaptchaCallback = () => {
+  gRecaptchaLoaded.resolve();
+}
 
 export default Component.extend({
 
@@ -16,11 +23,7 @@ export default Component.extend({
   tabindex: alias('tabIndex'),
 
   renderReCaptcha() {
-    if (isNone(window.grecaptcha)) {
-      later(() => {
-        this.renderReCaptcha();
-      }, 500);
-    } else {
+    next(() => {
       let container = this.$()[0];
       let properties = this.getProperties(
         'sitekey',
@@ -37,7 +40,7 @@ export default Component.extend({
       let widgetId = window.grecaptcha.render(container, parameters);
       this.set('widgetId', widgetId);
       this.set('ref', this);
-    }
+    });
   },
 
   resetReCaptcha() {
@@ -62,14 +65,26 @@ export default Component.extend({
     }
   },
 
+  loadGoogleRecaptcha() {
+    //TODO Configuration.gReCaptcha.jsUrl || default url
+    let src = 'https://www.google.com/recaptcha/api.js?onload=gRecaptchaCallback&render=explicit';
+    $.getScript(src);
+  },
 
   // Lifecycle Hooks
 
   didInsertElement() {
     this._super(...arguments);
-    next(() => {
-      this.renderReCaptcha();
-    });
+    if (window.grecaptcha) {
+        this.renderReCaptcha();
+    } else {
+      gRecaptchaLoaded.promise.then(() => {
+        if (!this.isDestroyed) {
+          this.renderReCaptcha();
+        }
+      });
+      this.loadGoogleRecaptcha();
+    }
   }
 
 });
